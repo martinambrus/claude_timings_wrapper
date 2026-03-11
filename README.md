@@ -7,20 +7,24 @@ Track how time is spent during Claude Code sessions: how long you're idle after 
 `claude-timed` is a Node.js PTY wrapper that sits between your terminal and the `claude` process. It uses two mechanisms to track timing:
 
 1. **Keystroke interception** — The wrapper intercepts stdin in raw mode to detect when you start typing (only real text input — arrow keys, Ctrl combos, Tab, etc. are ignored).
-2. **Stop hook** — A Claude Code [Stop hook](https://docs.anthropic.com/en/docs/claude-code/hooks) writes a millisecond timestamp to a temp file when the agent finishes working. The wrapper watches for this file to know exactly when the agent completed.
+2. **Claude Code hooks** — Two [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) drive transitions:
+   - **UserPromptSubmit** — Fires when the user actually submits a prompt. Writes a timestamp to a temp file so the wrapper knows when the agent started working.
+   - **Stop** — Fires when the agent finishes responding. Writes a timestamp so the wrapper knows when the agent completed.
 
-These two signals drive a state machine:
+These signals drive a state machine:
 
 ```
-INITIAL  --(first keystroke)--> typing started
-         --(Enter)-----------> AGENT_WORKING
+INITIAL  --(first keystroke)---------> typing started
+         --(UserPromptSubmit hook)---> AGENT_WORKING
 
-AGENT_WORKING --(Stop hook)--> IDLE
+AGENT_WORKING --(Stop hook)----------> IDLE
 
-IDLE --(first keystroke)-----> USER_TYPING
+IDLE --(first keystroke)--------------> USER_TYPING
 
-USER_TYPING --(Enter)-------> AGENT_WORKING
+USER_TYPING --(UserPromptSubmit hook)-> AGENT_WORKING
 ```
+
+Shift+Enter (multi-line input) is handled correctly: the `UserPromptSubmit` hook only fires on actual prompt submission, not on newline insertion. This works regardless of terminal capabilities.
 
 Each transition is logged to a per-session JSONL file in `~/.claude/timings/`.
 
@@ -38,9 +42,9 @@ cd claude_timings_wrapper
 npm install
 ```
 
-### Install the Stop hook
+### Install the hooks
 
-This adds a Stop hook entry to `~/.claude/settings.json` and copies the hook script to `~/.claude/hooks/`. Your existing settings (other hooks, plugins, statusLine, etc.) are preserved. A `.timing-bak` backup is created before any modification.
+This adds Stop and UserPromptSubmit hook entries to `~/.claude/settings.json` and copies the hook scripts to `~/.claude/hooks/`. Your existing settings (other hooks, plugins, statusLine, etc.) are preserved. A `.timing-bak` backup is created before any modification.
 
 ```bash
 node bin/claude-timed.mjs --install-hook
@@ -98,9 +102,9 @@ Time distribution:
   Agent: 83.9%  █████████████████░░░
 ```
 
-### Uninstall the hook
+### Uninstall the hooks
 
-Removes the Stop hook from settings and deletes the hook script. Other settings are untouched.
+Removes timing hooks from settings and deletes the hook scripts. Other settings are untouched.
 
 ```bash
 claude-timed --uninstall-hook
@@ -148,14 +152,14 @@ claude_timings_wrapper/
 │   ├── timing-log.mjs            # Per-session JSONL read/write
 │   ├── stats.mjs                 # --stats display with date filtering
 │   ├── title-bar.mjs             # Terminal title bar timer
-│   └── hook-installer.mjs        # Install/uninstall Stop hook
+│   └── hook-installer.mjs        # Install/uninstall Claude Code hooks
 └── hooks/
-    └── claude-timing-stop.sh     # Stop hook script
+    ├── claude-timing-stop.sh     # Stop hook script
+    └── claude-timing-start.sh    # UserPromptSubmit hook script
 ```
 
 ## Limitations
 
-- **Enter = submit**: A bare Enter keystroke (byte `0x0d`, length 1) is treated as prompt submission. Multi-line input via Shift+Enter or paste is not distinguished in v1.
 - **First prompt idle time**: The very first prompt has no idle time measurement since there's no prior agent completion to measure from.
 - **Abrupt termination**: If the process is killed (SIGKILL, power loss), the `session_end` summary won't be written. Stats will recompute totals from individual events in this case.
 
