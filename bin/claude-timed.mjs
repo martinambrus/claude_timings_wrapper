@@ -35,6 +35,7 @@ Usage:
   claude-timed --stats YYYY-MM-DD     Since a specific date
   claude-timed --stats DATE1 DATE2    Custom date range
   claude-timed --stats all            All sessions
+  claude-timed --stats [range] --project NAME   Filter by project name
   claude-timed --timing-help          Show this help`);
   process.exit(0);
 }
