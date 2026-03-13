@@ -15,6 +15,23 @@ if (args[0] === '--uninstall-hook') {
   process.exit(0);
 }
 
+if (args[0] === '--version') {
+  const { getVersion } = await import('../lib/update-checker.mjs');
+  console.log(`claude-timed v${getVersion()}`);
+  process.exit(0);
+}
+
+if (args[0] === '--check-update') {
+  const { checkForUpdate, formatUpdateNotice, getVersion } = await import('../lib/update-checker.mjs');
+  const info = await checkForUpdate({ force: true });
+  if (info) {
+    console.log(formatUpdateNotice(info));
+  } else {
+    console.log(`claude-timed v${getVersion()} is up to date.`);
+  }
+  process.exit(0);
+}
+
 if (args[0] === '--stats') {
   const { showStats } = await import('../lib/stats.mjs');
   showStats(args.slice(1));
@@ -22,7 +39,8 @@ if (args[0] === '--stats') {
 }
 
 if (args[0] === '--timing-help') {
-  console.log(`claude-timed — Claude Code session timing wrapper
+  const { getVersion } = await import('../lib/update-checker.mjs');
+  console.log(`claude-timed v${getVersion()} — Claude Code session timing wrapper
 
 Usage:
   claude-timed [claude args...]       Start Claude with timing
@@ -36,8 +54,21 @@ Usage:
   claude-timed --stats DATE1 DATE2    Custom date range
   claude-timed --stats all            All sessions
   claude-timed --stats [range] --project NAME   Filter by project name
+  claude-timed --version              Show version
+  claude-timed --check-update         Check for updates
   claude-timed --timing-help          Show this help`);
   process.exit(0);
+}
+
+// Auto update check (cached, at most once per 24h)
+try {
+  const { checkForUpdate, formatUpdateNotice } = await import('../lib/update-checker.mjs');
+  const updateInfo = await checkForUpdate();
+  if (updateInfo) {
+    process.stderr.write(formatUpdateNotice(updateInfo));
+  }
+} catch {
+  // Never let update check prevent normal operation
 }
 
 // Default: launch the wrapper with all args passed to claude
