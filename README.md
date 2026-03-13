@@ -7,9 +7,11 @@ Track how time is spent during Claude Code sessions: how long you're idle after 
 `claude-timed` is a Node.js PTY wrapper that sits between your terminal and the `claude` process. It uses two mechanisms to track timing:
 
 1. **Keystroke interception** — The wrapper intercepts stdin in raw mode to detect when you start typing (only real text input — arrow keys, Ctrl combos, Tab, etc. are ignored).
-2. **Claude Code hooks** — Two [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) drive transitions:
+2. **Claude Code hooks** — Four [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) drive transitions:
    - **UserPromptSubmit** — Fires when the user actually submits a prompt. Writes a timestamp to a temp file so the wrapper knows when the agent started working.
    - **Stop** — Fires when the agent finishes responding. Writes a timestamp so the wrapper knows when the agent completed.
+   - **Notification** (`elicitation_dialog` matcher) — Fires when the agent enters plan mode and asks the user to confirm/adjust. The Stop hook doesn't fire in this case, so this ensures the wrapper correctly transitions to IDLE.
+   - **PreToolUse** (`AskUserQuestion` matcher) — Fires when the agent asks the user a question, treating it as a stop point similar to Stop.
 
 These signals drive a state machine:
 
@@ -17,14 +19,24 @@ These signals drive a state machine:
 INITIAL  --(first keystroke)---------> typing started
          --(UserPromptSubmit hook)---> AGENT_WORKING
 
-AGENT_WORKING --(Stop hook)----------> IDLE
+AGENT_WORKING --(Stop/Notification/PreToolUse hook)--> IDLE
+              --(Ctrl+C)-----------------------------> IDLE (agent_interrupt)
 
 IDLE --(first keystroke)--------------> USER_TYPING
+     --(Stop hook, no prior submit)---> IDLE (background_agent_stop, time counted as agent work)
 
 USER_TYPING --(UserPromptSubmit hook)-> AGENT_WORKING
+            --(Ctrl+C)----------------> IDLE (typing discarded)
+
+AGENT_WORKING + typing --(UserPromptSubmit)-> steering_submit logged, stays in AGENT_WORKING
 ```
 
-Shift+Enter (multi-line input) is handled correctly: the `UserPromptSubmit` hook only fires on actual prompt submission, not on newline insertion. This works regardless of terminal capabilities.
+Additional behaviors:
+
+- **Shift+Enter** (multi-line input) is handled correctly: the `UserPromptSubmit` hook only fires on actual prompt submission, not on newline insertion.
+- **Mid-agent steering**: If you type and submit while the agent is working, your typing time is tracked separately as a `steering_submit` event without interrupting the agent timer.
+- **Ctrl+C**: Pressing Ctrl+C while the agent is working properly ends the agent phase (logged as `agent_interrupt`) and transitions to IDLE, since the Stop hook does not fire on user interrupts.
+- **Background agents**: When the agent spawns background sub-agents and waits for them, the stop signals arrive without a preceding UserPromptSubmit. This wait time is correctly attributed to agent work rather than idle time.
 
 Each transition is logged to a per-session JSONL file in `~/.claude/timings/`.
 
@@ -44,7 +56,7 @@ npm install
 
 ### Install the hooks
 
-This adds Stop and UserPromptSubmit hook entries to `~/.claude/settings.json` and copies the hook scripts to `~/.claude/hooks/`. Your existing settings (other hooks, plugins, statusLine, etc.) are preserved. A `.timing-bak` backup is created before any modification.
+This adds Stop, UserPromptSubmit, Notification, and PreToolUse hook entries to `~/.claude/settings.json` and copies the hook scripts to `~/.claude/hooks/`. Your existing settings (other hooks, plugins, statusLine, etc.) are preserved. A `.timing-bak` backup is created before any modification.
 
 ```bash
 node bin/claude-timed.mjs --install-hook
@@ -82,15 +94,43 @@ claude-timed --stats month                    # Last 30 days
 claude-timed --stats 2026-03-01               # Since a specific date
 claude-timed --stats 2026-03-01 2026-03-11    # Custom date range
 claude-timed --stats all                      # All sessions
+claude-timed --stats week --project myapp     # Filter by project name
 ```
 
-Example output:
+When viewing time-range stats (anything except a single session), results are grouped by project with a per-project breakdown. The project name is derived from the working directory where each session was started.
+
+Example output (time-range query with per-project breakdown):
 
 ```
 === Claude Code Timing Stats ===
 Period: Today (2026-03-11)
 Sessions: 3 | Prompts: 22
 
+-- myapp (2 sessions, 15 prompts) --
+   /home/user/myapp
+             Total        Average/prompt
+  User:      8m 30s       34.0s
+    Idle:    5m 15s       21.0s
+    Typing:  3m 15s       13.0s
+  Agent:     50m          3m 20s
+
+Time distribution:
+  User:  14.5%  ███░░░░░░░░░░░░░░░░░
+  Agent: 85.5%  █████████████████░░░
+
+-- other-project (1 session, 7 prompts) --
+   /home/user/other-project
+             Total        Average/prompt
+  User:      4m           34.3s
+    Idle:    3m           25.7s
+    Typing:  1m           8.6s
+  Agent:     15m          2m 8s
+
+Time distribution:
+  User:  21.1%  ████░░░░░░░░░░░░░░░░
+  Agent: 78.9%  ████████████████░░░░
+
+-- Overall --
              Total        Average/prompt
   User:      12m 30s      34.1s
     Idle:    8m 15s       22.5s
@@ -104,7 +144,7 @@ Time distribution:
 
 ### Uninstall the hooks
 
-Removes timing hooks from settings and deletes the hook scripts. Other settings are untouched.
+Removes all timing hooks (Stop, UserPromptSubmit, Notification, PreToolUse) from settings and deletes the hook scripts. Other settings are untouched.
 
 ```bash
 claude-timed --uninstall-hook
@@ -158,9 +198,21 @@ Each file contains one JSON object per line:
 {"ts":"...","event":"agent_stop","prompt":1,"agent_work_ms":45000}
 {"ts":"...","event":"typing_start","prompt":2,"idle_ms":30000}
 {"ts":"...","event":"prompt_submit","prompt":2,"typing_ms":10000}
+{"ts":"...","event":"steering_submit","typing_ms":2100}
 {"ts":"...","event":"agent_stop","prompt":2,"agent_work_ms":35000}
-{"ts":"...","event":"session_end","total_user_ms":45230,"total_idle_ms":30000,"total_typing_ms":15230,"total_agent_ms":80000,"prompts":2}
+{"ts":"...","event":"background_agent_stop","agent_work_ms":5000}
+{"ts":"...","event":"agent_interrupt","prompt":3,"agent_work_ms":12000}
+{"ts":"...","event":"session_end","total_user_ms":45230,"total_idle_ms":30000,"total_typing_ms":15230,"total_agent_ms":80000,"prompts":2,"cwd":"/home/user/myapp"}
 ```
+
+Event types:
+- `session_start` / `session_end` — Session lifecycle. The end event includes `cwd` (working directory) for per-project grouping.
+- `typing_start` — User started typing after being idle. Records `idle_ms`.
+- `prompt_submit` — User submitted a prompt. Records `typing_ms`.
+- `agent_stop` — Agent finished working. Records `agent_work_ms`.
+- `steering_submit` — User submitted input while the agent was still working (mid-agent steering). Records `typing_ms` without interrupting the agent timer.
+- `background_agent_stop` — A background sub-agent completed. The wait time is attributed to agent work. May include `idle_correction_ms` if the user had started typing during the wait.
+- `agent_interrupt` — User pressed Ctrl+C to interrupt the agent. Records partial `agent_work_ms`.
 
 ## Project structure
 
