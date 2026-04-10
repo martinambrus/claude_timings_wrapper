@@ -9,6 +9,11 @@
       "version": "1.1.0",
       "notes": "Detect overlapping Claude sessions (warning at startup, note at exit, marker in --stats), add macOS sound support, and use os.tmpdir() for cross-platform temp files (Linux, WSL, macOS).",
       "steps": ["git pull", "claude-timed --install-hook"]
+    },
+    {
+      "version": "1.2.0",
+      "notes": "Add --no-noop and --noop-threshold flags to exclude long idle/typing pauses (e.g. waiting for budget replenishment) from stats.",
+      "steps": ["git pull"]
     }
   ]
 }

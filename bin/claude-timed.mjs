@@ -54,6 +54,8 @@ Usage:
   claude-timed --stats DATE1 DATE2    Custom date range
   claude-timed --stats all            All sessions
   claude-timed --stats [range] --project NAME   Filter by project name
+  claude-timed --stats [range] --no-noop        Exclude noop pauses (>1h30m idle/typing)
+  claude-timed --stats [range] --noop-threshold 45m  Custom noop threshold (e.g. 1h30m, 2h, 1d)
   claude-timed --version              Show version
   claude-timed --check-update         Check for updates
   claude-timed --timing-help          Show this help`);
