@@ -14,6 +14,21 @@
       "version": "1.2.0",
       "notes": "Add --no-noop and --noop-threshold flags to exclude long idle/typing pauses (e.g. waiting for budget replenishment) from stats.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.3.0",
+      "notes": "Pro-rate session times to queried date range. Sessions spanning midnight no longer inflate single-day stats with time from other days.",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.4.0",
+      "notes": "Show per-day breakdown in multi-day date range stats (e.g. --stats week, --stats DATE1 DATE2).",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.5.0",
+      "notes": "Detect stalled sessions (e.g. budget limit, network disconnect) after 60 minutes of no PTY output. Timer stops and work is counted only up to the last observed activity.",
+      "steps": ["git pull"]
     }
   ]
 }
