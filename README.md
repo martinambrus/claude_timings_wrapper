@@ -95,6 +95,8 @@ claude-timed --stats 2026-03-01               # Since a specific date
 claude-timed --stats 2026-03-01 2026-03-11    # Custom date range
 claude-timed --stats all                      # All sessions
 claude-timed --stats week --project myapp     # Filter by project name
+claude-timed --stats week --no-noop           # Exclude long idle pauses (>1h30m)
+claude-timed --stats week --noop-threshold 45m  # Custom noop threshold
 ```
 
 When viewing time-range stats (anything except a single session), results are grouped by project with a per-project breakdown. The project name is derived from the working directory where each session was started.
@@ -140,6 +142,46 @@ Time distribution:
 Time distribution:
   User:  16.1%  ███░░░░░░░░░░░░░░░░░
   Agent: 83.9%  █████████████████░░░
+```
+
+### Per-task time breakdown
+
+Estimate how long each feature or fix took by correlating git commit history with session timing data. Works with both merge-based workflows (feature branches merged into main) and linear histories (direct commits).
+
+```bash
+claude-timed --tasks                          # All time, all projects
+claude-timed --tasks today                    # Today's tasks
+claude-timed --tasks week                     # Last 7 days
+claude-timed --tasks month                    # Last 30 days
+claude-timed --tasks 2026-04-01 2026-04-10    # Custom date range
+claude-timed --tasks week --project myapp     # Filter by project
+claude-timed --tasks week --no-noop           # Exclude long pauses
+claude-timed --tasks week --export-md FILE    # Export as markdown
+```
+
+For merge commits, the task window spans from the earliest branch commit to the merge date. For standalone commits on a linear branch, consecutive commits within 15 minutes of each other are grouped into a single task. Time that doesn't fall into any task window is shown as `[unattributed]`.
+
+Example output:
+
+```
+=== Claude Code Task Breakdown ===
+Period: Last 7 days (2026-04-03 to 2026-04-10)
+Project: myapp
+
+Note: Task timings are estimates based on git history correlation. Interleaved
+work, branch switching, and non-commit activity may cause inaccuracies.
+
+  #  Task                                      Agent     User      Total   Prompts
+  ──────────────────────────────────────────────────────────────────────────────
+   1  Merge ISSUE-42: Add homepage tiles        1h 42m      23m    2h 5m       14
+      2026-04-07 → 2026-04-10 | 3 sessions
+   2  fix: correct tile alignment                  52m      18m   1h 10m        7
+      2026-04-08 | 2 sessions
+   3  [unattributed]                               34m      12m      46m        5
+  ──────────────────────────────────────────────────────────────────────────────
+      Total                                      3h 8m      53m    4h 1m       26
+
+Note: Task timings are estimates. See above disclaimer.
 ```
 
 ### Uninstall the hooks
@@ -213,6 +255,8 @@ Event types:
 - `steering_submit` — User submitted input while the agent was still working (mid-agent steering). Records `typing_ms` without interrupting the agent timer.
 - `background_agent_stop` — A background sub-agent completed. The wait time is attributed to agent work. May include `idle_correction_ms` if the user had started typing during the wait.
 - `agent_interrupt` — User pressed Ctrl+C to interrupt the agent. Records partial `agent_work_ms`.
+- `agent_stall` — Agent produced no PTY output for 2 hours; assumed stalled (e.g. budget limit). Records `agent_work_ms` only up to last observed activity.
+- `typing_stall` — User typing phase stalled with no activity for 2 hours.
 
 ## Project structure
 
@@ -227,6 +271,7 @@ claude_timings_wrapper/
 │   ├── wrapper.mjs               # PTY spawn, state machine, keystroke detection
 │   ├── timing-log.mjs            # Per-session JSONL read/write
 │   ├── stats.mjs                 # --stats display with date filtering
+│   ├── tasks.mjs                 # --tasks per-task breakdown (git-correlated)
 │   ├── title-bar.mjs             # Terminal title bar timer
 │   ├── sound.mjs                 # Optional completion sound playback
 │   └── hook-installer.mjs        # Install/uninstall Claude Code hooks

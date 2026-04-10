@@ -29,6 +29,21 @@
       "version": "1.5.0",
       "notes": "Detect stalled sessions (e.g. budget limit, network disconnect) after 60 minutes of no PTY output. Timer stops and work is counted only up to the last observed activity.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.6.0",
+      "notes": "Add --tasks command: correlate git commit history with session logs to estimate per-task development time. Supports merge-based and linear repos, with --export-md for markdown output.",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.6.1",
+      "notes": "Fix inflated stats: agent_stop/agent_stall/typing_stall with agent_work_ms=0 now correctly transition phase to idle, preventing overnight sessions from being counted as agent work. Also cap standalone task window lookback to 2 hours.",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.6.2",
+      "notes": "Resolve cleaned-up worktree sessions to their parent git repo, so work done in worktrees is attributed to the correct project and task windows.",
+      "steps": ["git pull"]
     }
   ]
 }

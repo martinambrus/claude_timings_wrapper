@@ -38,6 +38,12 @@ if (args[0] === '--stats') {
   process.exit(0);
 }
 
+if (args[0] === '--tasks') {
+  const { showTasks } = await import('../lib/tasks.mjs');
+  await showTasks(args.slice(1));
+  process.exit(0);
+}
+
 if (args[0] === '--timing-help') {
   const { getVersion } = await import('../lib/update-checker.mjs');
   console.log(`claude-timed v${getVersion()} — Claude Code session timing wrapper
@@ -56,6 +62,9 @@ Usage:
   claude-timed --stats [range] --project NAME   Filter by project name
   claude-timed --stats [range] --no-noop        Exclude noop pauses (>1h30m idle/typing)
   claude-timed --stats [range] --noop-threshold 45m  Custom noop threshold (e.g. 1h30m, 2h, 1d)
+  claude-timed --tasks [range]        Per-task time breakdown (git-correlated)
+  claude-timed --tasks [range] --project NAME   Filter tasks by project
+  claude-timed --tasks [range] --export-md FILE Export task breakdown as markdown
   claude-timed --version              Show version
   claude-timed --check-update         Check for updates
   claude-timed --timing-help          Show this help`);
