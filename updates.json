@@ -44,6 +44,16 @@
       "version": "1.6.2",
       "notes": "Resolve cleaned-up worktree sessions to their parent git repo, so work done in worktrees is attributed to the correct project and task windows.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.6.3",
+      "notes": "Extend task windows backward using session event data. From each task's first commit, walks back through the session to session_start, trimming at any idle gap >1h. Dramatically improves attribution for work-then-commit patterns.",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.7.0",
+      "notes": "Detect parallel tasks (overlapping commit windows) and show both per-task effort and wall-clock deduplicated totals. Terminal output marks parallel tasks and shows overlap. Markdown export includes dual tables: per-task effort and wall-clock allocation with parallel tasks combined.",
+      "steps": ["git pull"]
     }
   ]
 }
