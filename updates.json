@@ -59,6 +59,11 @@
       "version": "1.8.0",
       "notes": "Update checks are now opt-in. On first interactive run, claude-timed asks whether to check for new versions on startup; the answer is saved to settings.json (repo root, or ~/.claude/timings/ if globally installed). Edit that file to change the preference later.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.8.1",
+      "notes": "Detect 'out of extra usage' limit from Claude Code output. Stops the agent timer immediately instead of waiting for the 120-minute stall timeout or process exit.",
+      "steps": ["git pull"]
     }
   ]
 }
