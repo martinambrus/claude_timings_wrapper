@@ -1,6 +1,6 @@
 {
   "name": "claude-timed",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Track time spent during Claude Code sessions: idle, typing, and agent work",
   "type": "module",
   "bin": {

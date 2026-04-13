@@ -54,6 +54,11 @@
       "version": "1.7.0",
       "notes": "Detect parallel tasks (overlapping commit windows) and show both per-task effort and wall-clock deduplicated totals. Terminal output marks parallel tasks and shows overlap. Markdown export includes dual tables: per-task effort and wall-clock allocation with parallel tasks combined.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.8.0",
+      "notes": "Update checks are now opt-in. On first interactive run, claude-timed asks whether to check for new versions on startup; the answer is saved to settings.json (repo root, or ~/.claude/timings/ if globally installed). Edit that file to change the preference later.",
+      "steps": ["git pull"]
     }
   ]
 }

@@ -71,12 +71,16 @@ Usage:
   process.exit(0);
 }
 
-// Auto update check (cached, at most once per 24h)
+// Auto update check (opt-in; cached, at most once per 24h)
 try {
-  const { checkForUpdate, formatUpdateNotice } = await import('../lib/update-checker.mjs');
-  const updateInfo = await checkForUpdate();
-  if (updateInfo) {
-    process.stderr.write(formatUpdateNotice(updateInfo));
+  const { ensureUpdateCheckSetting } = await import('../lib/settings.mjs');
+  const enabled = await ensureUpdateCheckSetting();
+  if (enabled) {
+    const { checkForUpdate, formatUpdateNotice } = await import('../lib/update-checker.mjs');
+    const updateInfo = await checkForUpdate();
+    if (updateInfo) {
+      process.stderr.write(formatUpdateNotice(updateInfo));
+    }
   }
 } catch {
   // Never let update check prevent normal operation
