@@ -38,6 +38,13 @@ if (args[0] === '--stats') {
   process.exit(0);
 }
 
+if (args[0] === '--repair') {
+  const { repairSessions } = await import('../lib/repair.mjs');
+  const dryRun = args.includes('--dry-run');
+  repairSessions({ dryRun });
+  process.exit(0);
+}
+
 if (args[0] === '--tasks') {
   const { showTasks } = await import('../lib/tasks.mjs');
   await showTasks(args.slice(1));
@@ -65,6 +72,8 @@ Usage:
   claude-timed --tasks [range]        Per-task time breakdown (git-correlated)
   claude-timed --tasks [range] --project NAME   Filter tasks by project
   claude-timed --tasks [range] --export-md FILE Export task breakdown as markdown
+  claude-timed --repair               Repair old sessions with oversized idle/typing gaps
+  claude-timed --repair --dry-run     Preview repairs without modifying files
   claude-timed --version              Show version
   claude-timed --check-update         Check for updates
   claude-timed --timing-help          Show this help`);

@@ -69,6 +69,11 @@
       "version": "1.9.0",
       "notes": "Fix state machine: add typing idle timeout (5 min), PAUSED state to cap idle gaps, and alive-check stall detection. Prevents overnight idle from being counted as work or typing, and avoids false stall when agent process is still alive.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.9.1",
+      "notes": "Add --repair command to fix old sessions with oversized idle/typing gaps (caps to 5 min, inserts synthetic pause/resume events, recomputes totals). Backs up originals to .bak files.",
+      "steps": ["git pull"]
     }
   ]
 }
