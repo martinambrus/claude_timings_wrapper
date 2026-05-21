@@ -74,6 +74,11 @@
       "version": "1.9.1",
       "notes": "Add --repair command to fix old sessions with oversized idle/typing gaps (caps to 5 min, inserts synthetic pause/resume events, recomputes totals). Backs up originals to .bak files.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.9.2",
+      "notes": "Extended repair to also cap oversized background_agent_stop.agent_work_ms and session_end residuals. --tasks now shows idle/typing/agent breakdown per task.",
+      "steps": ["git pull"]
     }
   ]
 }
