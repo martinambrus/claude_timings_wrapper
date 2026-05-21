@@ -64,6 +64,11 @@
       "version": "1.8.1",
       "notes": "Detect 'out of extra usage' limit from Claude Code output. Stops the agent timer immediately instead of waiting for the 120-minute stall timeout or process exit.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.9.0",
+      "notes": "Fix state machine: add typing idle timeout (5 min), PAUSED state to cap idle gaps, and alive-check stall detection. Prevents overnight idle from being counted as work or typing, and avoids false stall when agent process is still alive.",
+      "steps": ["git pull"]
     }
   ]
 }
