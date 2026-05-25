@@ -114,6 +114,11 @@
       "version": "1.11.1",
       "notes": "--attribute-llm now chunks prompts into batches (60 per headless call) so large windows can't blow the timeout (time-to-first-token grows with payload size). Auth retry happens once and is reused across batches; transient spawn failures (ENOENT/EAGAIN) are retried with back-off; partial results are kept and reported if some batches fail. The status line now shows the model actually used.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.11.2",
+      "notes": "Fix --tasks date ranges (today/week/month/DATE1 DATE2) counting FULL session time instead of clipping to the range. Because the file scan expands +/-3 days, sessions from adjacent days were inflating project totals and the [unattributed] bucket. Project totals, per-task time, wall-clock, and orphan prompts are now clipped to the requested range — matching --stats. --tasks all is unchanged.",
+      "steps": ["git pull"]
     }
   ]
 }
