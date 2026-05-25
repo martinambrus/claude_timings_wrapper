@@ -79,6 +79,41 @@
       "version": "1.9.2",
       "notes": "Extended repair to also cap oversized background_agent_stop.agent_work_ms and session_end residuals. --tasks now shows idle/typing/agent breakdown per task.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.10.0",
+      "notes": "Inspect the [unattributed] bucket in --tasks. New --unattributed-prompts lists every prompt that falls outside all task windows (with per-prompt agent/user time, git branch, and a reconciliation line vs the residual). New --attribute-llm uses a headless 'claude -p' call to thematically map those prompts to existing tasks (display-only). Opt-in forward prompt capture (--capture-prompts, or --enable-prompt-capture to persist) records prompt text in the timing log; otherwise text is resolved from Claude's transcripts. Agent time is never no-op'd.",
+      "steps": ["git pull", "claude-timed --install-hook"]
+    },
+    {
+      "version": "1.10.1",
+      "notes": "When prompt capture is enabled, the wrapper now prints a privacy reminder at the start of every session (prompt text is being saved to the timing log) along with the command to disable it.",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.10.2",
+      "notes": "--attribute-llm now reports a clear status: whether the LLM ran (✓) or not (✗ with the reason, e.g. auth error), how many prompts it matched to how many tasks/commits, and how many prompts had no recoverable text. Matched tasks now show their commit hash. The status is printed at the top of the section so it isn't buried under the prompt list.",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.10.3",
+      "notes": "Fix --attribute-llm auth and parsing. A stale/placeholder ANTHROPIC_API_KEY shadows Claude OAuth and causes a 401; the headless call now retries with the key stripped so OAuth login is used. Also robustly parse the model's JSON answer when it is wrapped in markdown code fences or surrounded by prose.",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.10.4",
+      "notes": "Fix --attribute-llm ETIMEDOUT. The headless classification call now runs with --strict-mcp-config and --no-session-persistence so a slow/hanging MCP server can't stall startup (classification needs no tools), and the timeout is raised to 240s. Clearer timeout message.",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.11.0",
+      "notes": "Add --attribute-debug to diagnose LLM attribution: prints per-attempt timing, env/auth state, the exact claude command, and the claude --debug trace (via --debug-file) to stderr — so you can see where a slow/hanging headless call stalls. Add --attribute-timeout SEC to fail fast. Default attribution model is now 'haiku' (faster and cheaper for classification; override with --attribute-model sonnet).",
+      "steps": ["git pull"]
+    },
+    {
+      "version": "1.11.1",
+      "notes": "--attribute-llm now chunks prompts into batches (60 per headless call) so large windows can't blow the timeout (time-to-first-token grows with payload size). Auth retry happens once and is reused across batches; transient spawn failures (ENOENT/EAGAIN) are retried with back-off; partial results are kept and reported if some batches fail. The status line now shows the model actually used.",
+      "steps": ["git pull"]
     }
   ]
 }

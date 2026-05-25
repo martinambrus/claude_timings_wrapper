@@ -15,6 +15,17 @@ if (args[0] === '--uninstall-hook') {
   process.exit(0);
 }
 
+if (args[0] === '--enable-prompt-capture' || args[0] === '--disable-prompt-capture') {
+  const enable = args[0] === '--enable-prompt-capture';
+  const { setCapturePrompts } = await import('../lib/settings.mjs');
+  const where = setCapturePrompts(enable);
+  console.log(`Prompt capture ${enable ? 'enabled' : 'disabled'} (saved to ${where}).`);
+  if (enable) {
+    console.log('Prompt text will be recorded in your timing logs for future sessions.');
+  }
+  process.exit(0);
+}
+
 if (args[0] === '--version') {
   const { getVersion } = await import('../lib/update-checker.mjs');
   console.log(`claude-timed v${getVersion()}`);
@@ -72,6 +83,13 @@ Usage:
   claude-timed --tasks [range]        Per-task time breakdown (git-correlated)
   claude-timed --tasks [range] --project NAME   Filter tasks by project
   claude-timed --tasks [range] --export-md FILE Export task breakdown as markdown
+  claude-timed --tasks [range] --unattributed-prompts   List prompts that fall outside all task windows
+  claude-timed --tasks [range] --attribute-llm          LLM-assign unattributed prompts to tasks (implies --unattributed-prompts)
+  claude-timed --tasks [range] --attribute-llm --attribute-model MODEL --max-budget-usd N   Tune the LLM attribution
+  claude-timed --tasks [range] --attribute-llm --attribute-debug [--attribute-timeout SEC]  Diagnose the LLM call (prints subprocess timing + claude --debug trace to stderr)
+  claude-timed --capture-prompts [claude args...]   Start Claude and record prompt text in the timing log (opt-in, this run)
+  claude-timed --enable-prompt-capture     Persist prompt capture ON for future sessions
+  claude-timed --disable-prompt-capture    Persist prompt capture OFF
   claude-timed --repair               Repair old sessions with oversized idle/typing gaps
   claude-timed --repair --dry-run     Preview repairs without modifying files
   claude-timed --version              Show version
@@ -95,6 +113,20 @@ try {
   // Never let update check prevent normal operation
 }
 
-// Default: launch the wrapper with all args passed to claude
+// Default: launch the wrapper with all args passed to claude.
+// Opt-in prompt capture via the --capture-prompts flag (this run) or the
+// persistent `capturePrompts` setting.
+let capturePrompts = false;
+let claudeArgs = args;
+if (args.includes('--capture-prompts')) {
+  capturePrompts = true;
+  claudeArgs = args.filter(a => a !== '--capture-prompts');
+} else {
+  try {
+    const { getCapturePrompts } = await import('../lib/settings.mjs');
+    capturePrompts = getCapturePrompts();
+  } catch {}
+}
+
 const { startWrapper } = await import('../lib/wrapper.mjs');
-startWrapper(args);
+startWrapper(claudeArgs, { capturePrompts });

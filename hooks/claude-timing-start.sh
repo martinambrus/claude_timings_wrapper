@@ -10,9 +10,20 @@ fi
 
 # Honour TMPDIR (set by macOS by default) so the path matches what the
 # wrapper watches via os.tmpdir() in Node.
-TMPFILE="${TMPDIR:-/tmp}"
+TMPBASE="${TMPDIR:-/tmp}"
 # Strip any trailing slash from TMPDIR.
-TMPFILE="${TMPFILE%/}/claude_timing_start_${CLAUDE_TIMING_SESSION}"
+TMPBASE="${TMPBASE%/}"
+TMPFILE="${TMPBASE}/claude_timing_start_${CLAUDE_TIMING_SESSION}"
+PROMPTFILE="${TMPBASE}/claude_timing_prompt_${CLAUDE_TIMING_SESSION}"
+
+# Opt-in: when prompt capture is enabled, save the raw UserPromptSubmit payload
+# (JSON on stdin: prompt text + session id), capped at 16KB, BEFORE writing the
+# timestamp so the wrapper sees it on the same fs.watch event. The wrapper (Node)
+# parses it — no jq dependency here. Long prompts that exceed the cap simply fail
+# to parse and fall back to Claude's transcript at report time.
+if [ -n "$CLAUDE_TIMING_CAPTURE" ]; then
+  head -c 16384 > "$PROMPTFILE" 2>/dev/null
+fi
 
 # Get current epoch milliseconds. GNU date supports %N; BSD date (macOS)
 # does not, so fall back to perl which ships with macOS by default.
