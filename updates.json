@@ -119,6 +119,11 @@
       "version": "1.11.2",
       "notes": "Fix --tasks date ranges (today/week/month/DATE1 DATE2) counting FULL session time instead of clipping to the range. Because the file scan expands +/-3 days, sessions from adjacent days were inflating project totals and the [unattributed] bucket. Project totals, per-task time, wall-clock, and orphan prompts are now clipped to the requested range — matching --stats. --tasks all is unchanged.",
       "steps": ["git pull"]
+    },
+    {
+      "version": "1.12.0",
+      "notes": "--tasks output (terminal + --export-md) now always shows the Wall-clock (deduplicated) line, not only when parallel tasks overlap. The line splits time into Agent | Idle | Typing | Combined so idle within task windows is no longer hidden behind a single User column. The parallel-overlap subtext is suppressed when overlap is zero. Same --no-noop filtering is applied to per-task sums and the wall-clock row.",
+      "steps": ["git pull"]
     }
   ]
 }
