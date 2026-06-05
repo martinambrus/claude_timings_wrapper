@@ -29,6 +29,12 @@ USER_TYPING --(UserPromptSubmit hook)-> AGENT_WORKING
             --(Ctrl+C)----------------> IDLE (typing discarded)
 
 AGENT_WORKING + typing --(UserPromptSubmit)-> steering_submit logged, stays in AGENT_WORKING
+
+IDLE --(120 min no activity)----------> PAUSED (session_paused; stops accruing idle/typing time)
+PAUSED --(keystroke or hook)----------> resumes prior flow (session_resumed)
+
+USER_TYPING --(5 min no keystroke)----> IDLE (typing_idle; partial typing flushed)
+AGENT_WORKING --(rate-limit notice)---> agent timer stops (extra_usage_limit)
 ```
 
 Additional behaviors:
@@ -37,6 +43,9 @@ Additional behaviors:
 - **Mid-agent steering**: If you type and submit while the agent is working, your typing time is tracked separately as a `steering_submit` event without interrupting the agent timer.
 - **Ctrl+C**: Pressing Ctrl+C while the agent is working properly ends the agent phase (logged as `agent_interrupt`) and transitions to IDLE, since the Stop hook does not fire on user interrupts.
 - **Background agents**: When the agent spawns background sub-agents and waits for them, the stop signals arrive without a preceding UserPromptSubmit. This wait time is correctly attributed to agent work rather than idle time.
+- **Typing idle timeout**: If you start typing then walk away, typing time stops accruing after 5 minutes with no further keystrokes (`typing_idle`) instead of counting the whole gap as typing.
+- **Long idle pause**: After 120 minutes with no activity the session enters a PAUSED state (`session_paused`) and stops accruing time. The next keystroke or hook resumes it (`session_resumed`) without recording the gap.
+- **Rate-limit detection**: The wrapper scans Claude Code's output for rate-limit notices ("out of extra usage", `/rate-limit-options`) and stops the agent timer immediately (`extra_usage_limit`), rather than waiting for the 2-hour stall timeout. Hooks cannot detect this — no Stop/PreToolUse event fires when Claude Code enters the rate-limit state.
 
 Each transition is logged to a per-session JSONL file in `~/.claude/timings/`.
 
@@ -157,11 +166,15 @@ claude-timed --tasks 2026-04-01 2026-04-10    # Custom date range
 claude-timed --tasks week --project myapp     # Filter by project
 claude-timed --tasks week --no-noop           # Exclude long pauses
 claude-timed --tasks week --export-md FILE    # Export as markdown
+claude-timed --tasks week --unattributed-prompts  # List prompts outside all task windows
+claude-timed --tasks week --attribute-llm         # LLM-assign unattributed prompts to tasks
 ```
 
-For merge commits, the task window spans from the earliest branch commit to the merge date. For standalone commits on a linear branch, consecutive commits within 15 minutes of each other are grouped into a single task. Time that doesn't fall into any task window is shown as `[unattributed]`.
+For merge commits, the task window spans from the earliest branch commit to the merge date. For standalone commits on a linear branch, consecutive commits within 15 minutes of each other are grouped into a single task. User time is split into **Idle** and **Typing** columns; agent time is never noop-filtered. Time that doesn't fall into any task window is shown as `[unattributed]`.
 
-Example output:
+When task windows run in parallel (overlapping commit ranges), each task still reports its own effort and is tagged `parallel with #N`. Two totals are then shown: **Sum of tasks** (per-task effort added up, which double-counts overlap) and **Wall-clock (deduplicated)** (overlapping windows merged, so concurrent work is counted once). The wall-clock row always renders; an overlap subtext appears only when parallel tasks actually overlap.
+
+Example output (two parallel tasks plus unattributed time):
 
 ```
 === Claude Code Task Breakdown ===
@@ -171,17 +184,62 @@ Project: myapp
 Note: Task timings are estimates based on git history correlation. Interleaved
 work, branch switching, and non-commit activity may cause inaccuracies.
 
-  #  Task                                      Agent     User      Total   Prompts
-  ──────────────────────────────────────────────────────────────────────────────
-   1  Merge ISSUE-42: Add homepage tiles        1h 42m      23m    2h 5m       14
-      2026-04-07 → 2026-04-10 | 3 sessions
-   2  fix: correct tile alignment                  52m      18m   1h 10m        7
-      2026-04-08 | 2 sessions
-   3  [unattributed]                               34m      12m      46m        5
-  ──────────────────────────────────────────────────────────────────────────────
-      Total                                      3h 8m      53m    4h 1m       26
+  #  Task                                      Agent     Idle    Typing      Total   Prompts
+  ───────────────────────────────────────────────────────────────────────────────────────────────
+   1  Merge ISSUE-42: Add homepage tiles        1h 42m       8m      15m     2h 5m       14
+      2026-04-07 → 2026-04-10 | 3 sessions | parallel with #2
+   2  fix: correct tile alignment                  52m       6m      12m   1h 10m        7
+      2026-04-08 | 2 sessions | parallel with #1
+   3  [unattributed]                               34m       7m       5m      46m        5
+  ───────────────────────────────────────────────────────────────────────────────────────────────
+      Sum of tasks                              3h 8m      21m      32m    4h 1m       26
+      Wall-clock (deduplicated)                 2h 6m      11m      22m   2h 39m       21
+      (36m overlap from parallel tasks)
 
 Note: Task timings are estimates. See above disclaimer.
+```
+
+#### Inspecting unattributed time
+
+The `[unattributed]` bucket is whatever timing falls outside every task window. Two opt-in flags make it inspectable (both extend `--tasks`; agent time is never noop-filtered):
+
+```bash
+claude-timed --tasks week --unattributed-prompts   # List each orphan prompt with agent/user time + branch
+claude-timed --tasks week --attribute-llm          # Map those prompts to tasks/commits (implies --unattributed-prompts)
+```
+
+`--unattributed-prompts` lists every prompt that fell outside all task windows with its per-prompt agent/user time and a reconciliation line comparing the per-prompt sum against the residual `[unattributed]` total.
+
+`--attribute-llm` sends those prompts to a headless `claude -p` call that thematically assigns each to the most likely task or commit. It defaults to the haiku model, is OAuth-aware, and is tunable:
+
+```bash
+claude-timed --tasks week --attribute-llm --attribute-model sonnet   # Override the attribution model (default: haiku)
+claude-timed --tasks week --attribute-llm --max-budget-usd 0.50      # Cap estimated spend
+claude-timed --tasks week --attribute-llm --attribute-debug          # Print subprocess timing + claude --debug trace to stderr
+claude-timed --tasks week --attribute-llm --attribute-timeout 120    # Per-call timeout in seconds
+```
+
+Prompt text is resolved from self-contained capture when available, otherwise from Claude Code transcripts (which may have aged out of retention). To guarantee the text is available, enable prompt capture (below).
+
+#### Prompt capture
+
+Prompt text is **not** recorded by default. Opt in when you want `--unattributed-prompts` / `--attribute-llm` to show real prompt text:
+
+```bash
+claude-timed --capture-prompts [claude args...]   # Record prompt text for this run only
+claude-timed --enable-prompt-capture              # Persist capture ON for future sessions
+claude-timed --disable-prompt-capture             # Persist capture OFF
+```
+
+While capture is active a privacy reminder is printed each session. Captured text is stored alongside your timing logs in `~/.claude/timings/`.
+
+### Repair old sessions
+
+Early versions could record multi-hour `idle_ms` / `typing_ms` gaps (e.g. leaving a session open overnight) before the PAUSED state existed. `--repair` scans every session file, caps oversized idle/typing values and `background_agent_stop` / `session_end` agent residuals, inserts synthetic `session_paused` / `session_resumed` events, and recomputes `session_end` totals. Originals are backed up to `.bak` before any change.
+
+```bash
+claude-timed --repair             # Repair in place (backs up originals to .bak)
+claude-timed --repair --dry-run   # Preview repairs without modifying files
 ```
 
 ### Uninstall the hooks
@@ -197,6 +255,15 @@ claude-timed --uninstall-hook
 ```bash
 claude-timed --timing-help
 ```
+
+### Version and updates
+
+```bash
+claude-timed --version        # Print the installed version
+claude-timed --check-update   # Check GitHub for a newer version now
+```
+
+Automatic update checks are **opt-in**. On first run the wrapper asks once (saving your answer to `settings.json`) whether to enable them. If enabled, it checks GitHub at most once per 24h and prints a notice when a newer version exists. The check runs in the background and never blocks or delays normal startup.
 
 ## Completion sound (optional)
 
@@ -255,8 +322,12 @@ Event types:
 - `steering_submit` — User submitted input while the agent was still working (mid-agent steering). Records `typing_ms` without interrupting the agent timer.
 - `background_agent_stop` — A background sub-agent completed. The wait time is attributed to agent work. May include `idle_correction_ms` if the user had started typing during the wait.
 - `agent_interrupt` — User pressed Ctrl+C to interrupt the agent. Records partial `agent_work_ms`.
-- `agent_stall` — Agent produced no PTY output for 2 hours; assumed stalled (e.g. budget limit). Records `agent_work_ms` only up to last observed activity.
+- `agent_stall` — Agent produced no PTY output for 2 hours; assumed stalled (e.g. budget limit). Records `agent_work_ms` only up to last observed activity, then enters PAUSED.
 - `typing_stall` — User typing phase stalled with no activity for 2 hours.
+- `typing_idle` — Typing phase ended after 5 minutes with no keystrokes. Records `typing_ms` up to the last keystroke (prevents one keystroke then walking away from counting as hours of typing).
+- `agent_silence_check` — Diagnostic: the agent has been silent for the stall window but its process is still alive, so the stall is deferred and re-checked (up to 4 times, every 30 minutes). Records `silent_elapsed_ms`.
+- `session_paused` / `session_resumed` — After 120 minutes idle the session pauses and stops accruing time (`session_paused` records `idle_before_pause_ms`); the next keystroke or hook resumes it (`session_resumed`).
+- `extra_usage_limit` — A rate-limit notice was detected in Claude Code's output; the agent timer is stopped immediately. Records partial `agent_work_ms`.
 
 ## Project structure
 
@@ -272,6 +343,11 @@ claude_timings_wrapper/
 │   ├── timing-log.mjs            # Per-session JSONL read/write
 │   ├── stats.mjs                 # --stats display with date filtering
 │   ├── tasks.mjs                 # --tasks per-task breakdown (git-correlated)
+│   ├── repair.mjs                # --repair: cap oversized idle/typing gaps in old sessions
+│   ├── prompt-source.mjs         # Resolve prompt text (capture or transcripts) for --unattributed-prompts
+│   ├── llm-attribute.mjs         # --attribute-llm: map unattributed prompts to tasks via claude -p
+│   ├── settings.mjs              # ~/.claude/settings.json read/write (capture + update-check opt-ins)
+│   ├── update-checker.mjs        # --version / --check-update + opt-in GitHub update check
 │   ├── title-bar.mjs             # Terminal title bar timer
 │   ├── sound.mjs                 # Optional completion sound playback
 │   └── hook-installer.mjs        # Install/uninstall Claude Code hooks
